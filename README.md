@@ -74,9 +74,3 @@ py main.py --release
 # Silent background mode
 py main.py --background
 ```
-
----
-
-## License
-
-This project is licensed under the MIT License.
