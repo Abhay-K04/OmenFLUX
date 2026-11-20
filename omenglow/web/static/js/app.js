@@ -482,14 +482,34 @@ function updateZoneSwatches(colors) {
 async function applyHarmoniousPalette(palette) {
     if (!palette || palette.length < 4) return;
     currentZoneColors = palette;
-    await fetch("/api/color/all", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ colors: palette })
-    });
+    try {
+        const res = await fetch("/api/color/all", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ colors: palette })
+        });
+        if (!res.ok) {
+            // Fallback per-zone write if bulk route was unavailable
+            for (let z = 0; z < 4; z++) {
+                const [r, g, b] = palette[z];
+                await fetch("/api/color/zone", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ zone: z, r, g, b })
+                });
+            }
+        }
+    } catch (e) {
+        console.error("applyHarmoniousPalette error:", e);
+    }
     updateZoneSwatches(palette);
-    colorWheel.setColorRgb(...palette[0]);
-    updateHexInput(...palette[0]);
+    if (keyboard) {
+        keyboard.updateLighting(palette);
+    }
+    if (colorWheel) {
+        colorWheel.setColorRgb(...palette[0]);
+        updateHexInput(...palette[0]);
+    }
     updateHandoverDisplay("OmenFLUX", true, currentOlsPid);
 }
 
@@ -561,6 +581,8 @@ function randomizePalette() {
     }
     const palette = generateHarmonicPalette();
     applyHarmoniousPalette(palette);
+    document.querySelectorAll(".profile-card").forEach(c => c.classList.remove("active"));
+    activeProfileName = "";
 }
 
 async function randomizeFull() {
@@ -573,15 +595,15 @@ async function randomizeFull() {
     // 1. Generate harmonious 4-zone palette
     const palette = generateHarmonicPalette();
 
-    // 2. Pick dynamic animated procedural effect
+    // 2. Pick dynamic animated procedural effect (excluding static, off, and exclusive modes)
     const dynamicEffects = (cachedEffectsList && cachedEffectsList.length > 0)
-        ? cachedEffectsList.filter(e => !["Static", "Stealth", "Off"].includes(e))
+        ? cachedEffectsList.filter(e => !["Static", "Stealth", "Off", "Apex Overdrive", "Vanguard Protocol"].includes(e))
         : ["Breathing", "Color Wave", "Spectrum Cycle", "Prismatic Aurora", "Plasma Pulse", "Cyber Glitch", "Cosmic Starlight", "Solar Flare", "Binary Cascade"];
     
     const chosenEffect = dynamicEffects[Math.floor(Math.random() * dynamicEffects.length)];
     const randomSpeed = parseFloat((0.8 + Math.random() * 1.5).toFixed(1)); // 0.8x to 2.3x
 
-    // 3. Apply palette to zones
+    // 3. Apply palette to zones and wait for backend sync
     await applyHarmoniousPalette(palette);
 
     // 4. Update effect & speed
@@ -603,6 +625,12 @@ async function randomizeFull() {
             card.classList.remove("active");
         }
     });
+
+    const ind = document.getElementById("exclusiveEffectIndicator");
+    if (ind) ind.style.display = "none";
+
+    document.querySelectorAll(".profile-card").forEach(c => c.classList.remove("active"));
+    activeProfileName = "";
 
     await postEffectUpdate({ effect: chosenEffect, speed: randomSpeed });
 }

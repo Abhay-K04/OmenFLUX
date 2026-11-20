@@ -210,6 +210,22 @@ def set_zone_color():
     return jsonify({"success": True, "zone_colors": engine.zone_colors})
 
 
+@app.route("/api/color/all", methods=["POST"])
+def set_all_colors():
+    data = request.json or {}
+    colors = data.get("colors", [])
+    if colors and len(colors) >= 4:
+        parsed = [(int(c[0]), int(c[1]), int(c[2])) for c in colors[:4]]
+        engine.set_all_colors(parsed)
+        if handover.current_owner != ControlOwner.OMENPULSE:
+            handover.take_control()
+            engine.resume()
+
+        state_mgr.save_state({"zone_colors": engine.zone_colors, "owner": "OmenPulse"})
+        return jsonify({"success": True, "zone_colors": engine.zone_colors})
+    return jsonify({"success": False, "error": "Invalid colors payload"}), 400
+
+
 @app.route("/api/reactive/trigger", methods=["POST"])
 def api_reactive_trigger():
     data = request.json or {}
